@@ -1,0 +1,101 @@
+server:
+  port: 18080
+spring:
+  main:
+    allow-bean-definition-overriding: true
+  # 关于分库、分表的配置
+  shardingsphere:
+    # 1，配置数据源信息
+    datasource:
+      # 1.1，可以配置多个数据源，使用逗号隔开(注意数据源的名称要和数据库的名称保持一致)
+      names: ds-0,ds-1
+      # 1.2，配置数据源:ds-0
+      ds-0:
+        # driverClassName: com.mysql.jdbc.Driver
+        # 新版的配置驱动方式
+        driverClassName: com.mysql.cj.jdbc.Driver
+        # 指定当前使用的连接池
+        type: com.alibaba.druid.pool.DruidDataSource
+        url: jdbc:mysql://127.0.0.1:3306/ds-0?useUnicode=true&characterEncoding=utf8&tinyInt1isBit=false&useSSL=false&serverTimezone=GMT
+        username: root
+        password: 111111
+      # 1.3，配置数据源:ds-1
+      ds-1:
+        # driverClassName: com.mysql.jdbc.Driver
+        # 新版的配置驱动方式
+        driverClassName: com.mysql.cj.jdbc.Driver
+        type: com.alibaba.druid.pool.DruidDataSource
+        url: jdbc:mysql://127.0.0.1:3306/ds-1?useUnicode=true&characterEncoding=utf8&tinyInt1isBit=false&useSSL=false&serverTimezone=GMT
+        username: root
+        password: 111111
+    # 2，配置分片信息
+    sharding:
+      # 2.1,配置分片表(也就是逻辑表，可以指定多个)
+      tables:
+        # 2.1.1,配置分片表:t_order
+        t_order:
+          # (1),指定真实数据节点:库.表，{0..2}:表示0，1，2
+          actual-data-nodes: ds-$->{0..1}.t_order_$->{0..2}
+          # (2),分库分片策略
+          database-strategy:
+            # 行表达式分片策略(这里有四种可选的配置)
+#            inline:
+#              # 分库分片键
+#              sharding-column: order_id
+#              # 分库分片算法：约定id值，奇数进ds-0，偶数进ds-1
+#              algorithm-expression: ds-$->{order_id % 2}
+            # 标准分片算法
+            standard:
+              sharding-column: order_id
+              # 自定义精确分片算法(必选)：使用单个字段作为分片键，在 =、in等条件下的分片
+              precise-algorithm-class-name: top.wangyq.config.MyDBPreciseShardingAlgorithm
+              # 自定义范围分片算法：在 BETWEEN AND、>、<、>=、<=等条件下的分片
+              range-algorithm-class-name: top.wangyq.config.MyDBRangeShardingAlgorithm
+          # (3),分表策略
+          table-strategy:
+            inline:
+              # 分表分片键
+              sharding-column: order_id
+              # 分表算法：
+              algorithm-expression: t_order_$->{order_id % 3}
+          # (4,)主键设置
+          key-generator:
+            # 自增主键字段
+            column: order_id
+            # 自增主键生成方案
+            type: SNOWFLAKE
+            # 以下两个配置是在使用"SNOWFLAKE"算法的时候需要追加的配置
+            # 工作机器的唯一Id
+            props:
+              worker:
+                id: 0
+            # 最大容忍的时钟回拨毫秒数
+            max:
+              tolerate:
+                time:
+                  difference:
+                    milliseconds: 5
+        # 2.1.2,配置分片表:t_order_item
+        t_order_item:
+          actual-data-nodes: ds-$->{0..1}.t_order_item_$->{0..2}
+          database-strategy:
+            inline:
+              algorithm-expression: ds-$->{order_id % 2}
+              sharding-column: order_id
+          table-strategy:
+            inline:
+              algorithm-expression: t_order_item_$->{order_id % 3}
+              sharding-column: order_id
+          key-generator:
+            column: item_id
+            type: SNOWFLAKE
+      # 2.2,配置分片表之间的绑定关系
+      binding-tables: t_order, t_order_item
+      # 2.3,广播表
+      broadcast-tables: t_config
+      # 2.4,默认数据源，未分片的表默认的执行库
+      default-data-source-name: ds-0
+    # 3,是否开启SQL解析日志
+    props:
+      sql:
+        show: true
